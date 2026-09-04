@@ -3,10 +3,11 @@
 from phoenix_sales.api.contracts import RequestContext
 from phoenix_sales.domain.solution import Solution, SolutionComponent, SolutionStatus
 from phoenix_sales.domain.solution_lifecycle import validate_transition
+from phoenix_sales.persistence.solution_repository import SolutionRepository
 
 
 class SolutionService:
-    """Coordinate Solution commands while enforcing tenant and permissions."""
+    """Coordinate Solution commands, persistence, permissions, and lifecycle."""
 
     CREATE_PERMISSION = "sales.solution.create"
     READ_PERMISSION = "sales.solution.read"
@@ -16,14 +17,15 @@ class SolutionService:
     CANCEL_PERMISSION = "sales.solution.cancel"
     SUPERSEDE_PERMISSION = "sales.solution.supersede"
 
-    def __init__(self, context: RequestContext) -> None:
+    def __init__(self, context: RequestContext, repository: SolutionRepository) -> None:
         self._context = context
+        self._repository = repository
 
     def create_solution(self, *, opportunity_id, name: str, requirement: str,
                         application: str, project_id: str | None = None,
                         site_id: str | None = None) -> Solution:
         self._require(self.CREATE_PERMISSION)
-        return Solution(
+        solution = Solution(
             tenant_id=self._context.tenant.tenant_id,
             opportunity_id=opportunity_id,
             name=name,
@@ -32,11 +34,15 @@ class SolutionService:
             project_id=project_id,
             site_id=site_id,
         )
+        return self._repository.save(solution)
 
-    def get_solution(self, solution: Solution) -> Solution:
+    def get_solution(self, solution_id) -> Solution | None:
         self._require(self.READ_PERMISSION)
-        self._require_tenant(solution)
-        return solution
+        return self._repository.get(self._context.tenant.tenant_id, solution_id)
+
+    def list_by_opportunity(self, opportunity_id):
+        self._require(self.READ_PERMISSION)
+        return self._repository.list_by_opportunity(self._context.tenant.tenant_id, opportunity_id)
 
     def update_solution(self, solution: Solution, **changes: object) -> Solution:
         self._require(self.UPDATE_PERMISSION)
@@ -51,21 +57,21 @@ class SolutionService:
                 raise ValueError(f"unknown solution field: {field_name}")
             setattr(solution, field_name, value)
         self._validate_content(solution)
-        return solution
+        return self._repository.save(solution)
 
     def add_component(self, solution: Solution, component: SolutionComponent) -> Solution:
         self._require(self.UPDATE_PERMISSION)
         self._require_tenant(solution)
         self._ensure_editable(solution)
         solution.add_component(component)
-        return solution
+        return self._repository.save(solution)
 
     def submit_for_review(self, solution: Solution) -> Solution:
         self._require(self.REVIEW_PERMISSION)
         self._require_tenant(solution)
         validate_transition(solution.status, SolutionStatus.IN_REVIEW)
         solution.submit_for_review()
-        return solution
+        return self._repository.save(solution)
 
     def approve(self, solution: Solution) -> Solution:
         self._require(self.APPROVE_PERMISSION)
@@ -73,21 +79,21 @@ class SolutionService:
         validate_transition(solution.status, SolutionStatus.APPROVED)
         self._validate_content(solution)
         solution.approve()
-        return solution
+        return self._repository.save(solution)
 
     def cancel(self, solution: Solution) -> Solution:
         self._require(self.CANCEL_PERMISSION)
         self._require_tenant(solution)
         validate_transition(solution.status, SolutionStatus.CANCELLED)
         solution.cancel()
-        return solution
+        return self._repository.save(solution)
 
     def supersede(self, solution: Solution) -> Solution:
         self._require(self.SUPERSEDE_PERMISSION)
         self._require_tenant(solution)
         validate_transition(solution.status, SolutionStatus.SUPERSEDED)
         solution.status = SolutionStatus.SUPERSEDED
-        return solution
+        return self._repository.save(solution)
 
     @staticmethod
     def _validate_content(solution: Solution) -> None:
