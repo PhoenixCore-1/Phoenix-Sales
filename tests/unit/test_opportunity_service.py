@@ -86,19 +86,23 @@ def test_quote_requires_requirement_application_value_and_close_date():
         name="A", customer_id="C", owner_user_id="U",
         requirement="Requirement", application="Application",
     )
+    transition_service = service("sales.opportunity.transition")
+
+    transition_service.transition_opportunity(opportunity, OpportunityStage.QUALIFIED)
+    transition_service.transition_opportunity(opportunity, OpportunityStage.DISCOVERY)
+    transition_service.transition_opportunity(
+        opportunity, OpportunityStage.SOLUTION_DEVELOPMENT
+    )
+
     with pytest.raises(ValueError, match="estimated_value"):
-        service("sales.opportunity.transition").transition_opportunity(
-            opportunity, OpportunityStage.QUOTE
-        )
+        transition_service.transition_opportunity(opportunity, OpportunityStage.QUOTE)
+
     opportunity.estimated_value = Decimal("1000")
     with pytest.raises(ValueError, match="close_date"):
-        service("sales.opportunity.transition").transition_opportunity(
-            opportunity, OpportunityStage.QUOTE
-        )
+        transition_service.transition_opportunity(opportunity, OpportunityStage.QUOTE)
+
     opportunity.close_date = date(2026, 10, 1)
-    service("sales.opportunity.transition").transition_opportunity(
-        opportunity, OpportunityStage.QUOTE
-    )
+    transition_service.transition_opportunity(opportunity, OpportunityStage.QUOTE)
     assert opportunity.stage is OpportunityStage.QUOTE
 
 
