@@ -1,8 +1,9 @@
 """Application service for persistent Sales opportunities."""
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
+from uuid import UUID
 
 from phoenix_sales.api.contracts import RequestContext
 from phoenix_sales.domain.opportunity import Opportunity, OpportunityStage
@@ -19,9 +20,10 @@ class OpportunityOutcome:
 
 
 class OpportunityService:
-    """Coordinate opportunity commands and persistence."""
+    """Coordinate opportunity commands, queries, and persistence."""
 
     CREATE_PERMISSION = "sales.opportunity.create"
+    READ_PERMISSION = "sales.opportunity.read"
     UPDATE_PERMISSION = "sales.opportunity.update"
     TRANSITION_PERMISSION = "sales.opportunity.transition"
 
@@ -29,23 +31,47 @@ class OpportunityService:
         self._context = context
         self._repository = repository
 
-    def create_opportunity(self, *, name: str, customer_id: str, owner_user_id: str,
-                           contact_id: str | None = None, requirement: str | None = None,
-                           application: str | None = None, estimated_value: Decimal | None = None,
-                           close_date: date | None = None, source: str | None = None,
-                           project_id: str | None = None) -> Opportunity:
+    def create_opportunity(
+        self,
+        *,
+        name: str,
+        customer_id: str,
+        owner_user_id: str,
+        contact_id: str | None = None,
+        requirement: str | None = None,
+        application: str | None = None,
+        estimated_value: Decimal | None = None,
+        close_date: date | None = None,
+        source: str | None = None,
+        project_id: str | None = None,
+    ) -> Opportunity:
         self._require(self.CREATE_PERMISSION)
         opportunity = Opportunity(
-            tenant_id=self._context.tenant.tenant_id, name=name, customer_id=customer_id,
-            owner_user_id=owner_user_id, contact_id=contact_id, requirement=requirement,
-            application=application, estimated_value=estimated_value, close_date=close_date,
-            source=source, project_id=project_id,
+            tenant_id=self._context.tenant.tenant_id,
+            name=name,
+            customer_id=customer_id,
+            owner_user_id=owner_user_id,
+            contact_id=contact_id,
+            requirement=requirement,
+            application=application,
+            estimated_value=estimated_value,
+            close_date=close_date,
+            source=source,
+            project_id=project_id,
         )
         return self._repository.save(opportunity)
 
-    def get_opportunity(self, opportunity_id):
-        self._require(self.UPDATE_PERMISSION)
+    def get_opportunity(self, opportunity_id: UUID) -> Opportunity | None:
+        self._require(self.READ_PERMISSION)
         return self._repository.get(self._context.tenant.tenant_id, opportunity_id)
+
+    def list_by_customer(self, customer_id: str) -> list[Opportunity]:
+        self._require(self.READ_PERMISSION)
+        return self._repository.list_by_customer(self._context.tenant.tenant_id, customer_id)
+
+    def list_by_owner(self, owner_user_id: str) -> list[Opportunity]:
+        self._require(self.READ_PERMISSION)
+        return self._repository.list_by_owner(self._context.tenant.tenant_id, owner_user_id)
 
     def update_opportunity(self, opportunity: Opportunity, **changes: object) -> Opportunity:
         self._require(self.UPDATE_PERMISSION)
@@ -60,12 +86,16 @@ class OpportunityService:
             if not hasattr(opportunity, field_name):
                 raise ValueError(f"unknown opportunity field: {field_name}")
             setattr(opportunity, field_name, value)
-        from datetime import datetime, timezone
         opportunity.updated_at = datetime.now(timezone.utc)
         return self._repository.save(opportunity)
 
-    def transition_opportunity(self, opportunity: Opportunity, target: OpportunityStage,
-                               *, outcome: OpportunityOutcome | None = None) -> Opportunity:
+    def transition_opportunity(
+        self,
+        opportunity: Opportunity,
+        target: OpportunityStage,
+        *,
+        outcome: OpportunityOutcome | None = None,
+    ) -> Opportunity:
         self._require(self.TRANSITION_PERMISSION)
         self._require_tenant(opportunity)
         validate_transition(opportunity.stage, target)
