@@ -10,7 +10,6 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from phoenix_sales.api.contracts import RequestContext
 from phoenix_sales.domain.opportunity import Opportunity, OpportunityStage
 from phoenix_sales.services.opportunity import OpportunityOutcome, OpportunityService
 
@@ -66,8 +65,7 @@ class ListOwnerOpportunitiesQuery:
 class OpportunityApplication:
     """Controlled application boundary for Opportunity commands and queries."""
 
-    def __init__(self, context: RequestContext, service: OpportunityService) -> None:
-        self._context = context
+    def __init__(self, service: OpportunityService) -> None:
         self._service = service
 
     def create(self, command: CreateOpportunityCommand) -> Opportunity:
