@@ -18,22 +18,53 @@ ACTIVE_STAGES = frozenset(
 # active stages but are deliberately not allowed to reopen implicitly.
 ALLOWED_TRANSITIONS: dict[OpportunityStage, frozenset[OpportunityStage]] = {
     OpportunityStage.NEW: frozenset(
-        {OpportunityStage.QUALIFIED, OpportunityStage.LOST, OpportunityStage.NURTURE}
+        {
+            OpportunityStage.QUALIFIED,
+            OpportunityStage.LOST,
+            OpportunityStage.NURTURE,
+            OpportunityStage.DEFERRED,
+        }
     ),
     OpportunityStage.QUALIFIED: frozenset(
-        {OpportunityStage.DISCOVERY, OpportunityStage.LOST, OpportunityStage.NURTURE, OpportunityStage.DEFERRED}
+        {
+            OpportunityStage.DISCOVERY,
+            OpportunityStage.LOST,
+            OpportunityStage.NURTURE,
+            OpportunityStage.DEFERRED,
+        }
     ),
     OpportunityStage.DISCOVERY: frozenset(
-        {OpportunityStage.SOLUTION_DEVELOPMENT, OpportunityStage.LOST, OpportunityStage.NURTURE, OpportunityStage.DEFERRED}
+        {
+            OpportunityStage.SOLUTION_DEVELOPMENT,
+            OpportunityStage.LOST,
+            OpportunityStage.NURTURE,
+            OpportunityStage.DEFERRED,
+        }
     ),
     OpportunityStage.SOLUTION_DEVELOPMENT: frozenset(
-        {OpportunityStage.QUOTE, OpportunityStage.LOST, OpportunityStage.NURTURE, OpportunityStage.DEFERRED}
+        {
+            OpportunityStage.QUOTE,
+            OpportunityStage.LOST,
+            OpportunityStage.NURTURE,
+            OpportunityStage.DEFERRED,
+        }
     ),
     OpportunityStage.QUOTE: frozenset(
-        {OpportunityStage.NEGOTIATION, OpportunityStage.WON, OpportunityStage.LOST, OpportunityStage.NURTURE, OpportunityStage.DEFERRED}
+        {
+            OpportunityStage.NEGOTIATION,
+            OpportunityStage.WON,
+            OpportunityStage.LOST,
+            OpportunityStage.NURTURE,
+            OpportunityStage.DEFERRED,
+        }
     ),
     OpportunityStage.NEGOTIATION: frozenset(
-        {OpportunityStage.WON, OpportunityStage.LOST, OpportunityStage.NURTURE, OpportunityStage.DEFERRED}
+        {
+            OpportunityStage.WON,
+            OpportunityStage.LOST,
+            OpportunityStage.NURTURE,
+            OpportunityStage.DEFERRED,
+        }
     ),
     OpportunityStage.WON: frozenset(),
     OpportunityStage.LOST: frozenset(),
