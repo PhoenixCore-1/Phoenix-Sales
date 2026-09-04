@@ -8,6 +8,7 @@ from uuid import UUID
 from phoenix_sales.api.contracts import RequestContext
 from phoenix_sales.domain.opportunity import Opportunity, OpportunityStage
 from phoenix_sales.domain.opportunity_lifecycle import validate_transition
+from phoenix_sales.persistence.in_memory_opportunity_repository import InMemoryOpportunityRepository
 from phoenix_sales.persistence.opportunity_repository import OpportunityRepository
 
 
@@ -27,37 +28,21 @@ class OpportunityService:
     UPDATE_PERMISSION = "sales.opportunity.update"
     TRANSITION_PERMISSION = "sales.opportunity.transition"
 
-    def __init__(self, context: RequestContext, repository: OpportunityRepository) -> None:
+    def __init__(self, context: RequestContext, repository: OpportunityRepository | None = None) -> None:
         self._context = context
-        self._repository = repository
+        self._repository = repository or InMemoryOpportunityRepository()
 
-    def create_opportunity(
-        self,
-        *,
-        name: str,
-        customer_id: str,
-        owner_user_id: str,
-        contact_id: str | None = None,
-        requirement: str | None = None,
-        application: str | None = None,
-        estimated_value: Decimal | None = None,
-        close_date: date | None = None,
-        source: str | None = None,
-        project_id: str | None = None,
-    ) -> Opportunity:
+    def create_opportunity(self, *, name: str, customer_id: str, owner_user_id: str,
+                           contact_id: str | None = None, requirement: str | None = None,
+                           application: str | None = None, estimated_value: Decimal | None = None,
+                           close_date: date | None = None, source: str | None = None,
+                           project_id: str | None = None) -> Opportunity:
         self._require(self.CREATE_PERMISSION)
         opportunity = Opportunity(
-            tenant_id=self._context.tenant.tenant_id,
-            name=name,
-            customer_id=customer_id,
-            owner_user_id=owner_user_id,
-            contact_id=contact_id,
-            requirement=requirement,
-            application=application,
-            estimated_value=estimated_value,
-            close_date=close_date,
-            source=source,
-            project_id=project_id,
+            tenant_id=self._context.tenant.tenant_id, name=name, customer_id=customer_id,
+            owner_user_id=owner_user_id, contact_id=contact_id, requirement=requirement,
+            application=application, estimated_value=estimated_value, close_date=close_date,
+            source=source, project_id=project_id,
         )
         return self._repository.save(opportunity)
 
@@ -89,13 +74,8 @@ class OpportunityService:
         opportunity.updated_at = datetime.now(timezone.utc)
         return self._repository.save(opportunity)
 
-    def transition_opportunity(
-        self,
-        opportunity: Opportunity,
-        target: OpportunityStage,
-        *,
-        outcome: OpportunityOutcome | None = None,
-    ) -> Opportunity:
+    def transition_opportunity(self, opportunity: Opportunity, target: OpportunityStage,
+                               *, outcome: OpportunityOutcome | None = None) -> Opportunity:
         self._require(self.TRANSITION_PERMISSION)
         self._require_tenant(opportunity)
         validate_transition(opportunity.stage, target)
@@ -134,7 +114,7 @@ class OpportunityService:
                       OpportunityStage.DEFERRED}:
             if outcome is None or not outcome.reason.strip():
                 raise ValueError(f"{target.value} requires an outcome reason")
-        if target is OpportunityStage.DEFERRED and outcome.deferred_until is None:
+        if target is OpportunityStage.DEFERRED and outcome is None or target is OpportunityStage.DEFERRED and outcome.deferred_until is None:
             raise ValueError("DEFERRED requires deferred_until")
 
     def _require(self, permission: str) -> None:
