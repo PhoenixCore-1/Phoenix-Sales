@@ -77,6 +77,7 @@ class Quote:
     internal_reference: str | None = None
     notes: str | None = None
     lines: list[QuoteLine] = field(default_factory=list)
+    branch_id: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -89,6 +90,8 @@ class Quote:
             raise ValueError("quote_number is required")
         if not self.currency.strip():
             raise ValueError("currency is required")
+        if self.branch_id is not None and not self.branch_id.strip():
+            raise ValueError("branch_id cannot be blank")
         if self.version < 1:
             raise ValueError("version must be at least 1")
 
