@@ -1,9 +1,4 @@
-"""Sales-to-Inventory fulfilment integration contract.
-
-This module defines the boundary between the Sales business domain and the
-Inventory business domain. It contains contracts only; Inventory remains the
-authority for physical stock, allocation, picking, transfers and backorders.
-"""
+"""Sales-to-Inventory fulfilment integration contract."""
 
 from dataclasses import dataclass, field
 from datetime import date
@@ -38,10 +33,8 @@ class FulfilmentLineStatus(str, Enum):
 
 @dataclass(frozen=True)
 class FulfilmentLineRequest:
-    """A Sales Order line requirement presented to Inventory."""
-
     sales_order_line_id: UUID
-    item_id: UUID
+    item_id: str
     ordered_quantity: Decimal
     required_quantity: Decimal
     unit: str
@@ -49,7 +42,7 @@ class FulfilmentLineRequest:
     def __post_init__(self) -> None:
         if not self.sales_order_line_id:
             raise ValueError("Sales order line ID is required.")
-        if not self.item_id:
+        if not self.item_id or not str(self.item_id).strip():
             raise ValueError("Item ID is required.")
         if self.ordered_quantity <= 0:
             raise ValueError("Ordered quantity must be greater than zero.")
@@ -63,8 +56,6 @@ class FulfilmentLineRequest:
 
 @dataclass(frozen=True)
 class FulfilmentRequest:
-    """Immutable request from Sales to Inventory."""
-
     tenant_id: str
     sales_order_id: UUID
     order_number: str
@@ -94,16 +85,15 @@ class FulfilmentRequest:
 
 @dataclass(frozen=True)
 class FulfilmentLineResult:
-    """Inventory's authoritative result for one requested order line."""
-
     sales_order_line_id: UUID
-    item_id: UUID
+    item_id: str
     ordered_quantity: Decimal
     required_quantity: Decimal
     available_quantity: Decimal
     allocated_quantity: Decimal
     backorder_quantity: Decimal
     status: FulfilmentLineStatus
+    fulfilled_quantity: Decimal = Decimal("0")
     expected_fulfilment_date: date | None = None
     inventory_reference: str | None = None
     warehouse_reference: str | None = None
@@ -111,13 +101,14 @@ class FulfilmentLineResult:
     def __post_init__(self) -> None:
         if not self.sales_order_line_id:
             raise ValueError("Sales order line ID is required.")
-        if not self.item_id:
+        if not self.item_id or not str(self.item_id).strip():
             raise ValueError("Item ID is required.")
         for name, value in (
             ("ordered quantity", self.ordered_quantity),
             ("required quantity", self.required_quantity),
             ("available quantity", self.available_quantity),
             ("allocated quantity", self.allocated_quantity),
+            ("fulfilled quantity", self.fulfilled_quantity),
             ("backorder quantity", self.backorder_quantity),
         ):
             if value < 0:
@@ -126,16 +117,16 @@ class FulfilmentLineResult:
             raise ValueError("Required quantity cannot exceed ordered quantity.")
         if self.allocated_quantity > self.required_quantity:
             raise ValueError("Allocated quantity cannot exceed required quantity.")
+        if self.fulfilled_quantity > self.ordered_quantity:
+            raise ValueError("Fulfilled quantity cannot exceed ordered quantity.")
         if self.backorder_quantity > self.required_quantity:
             raise ValueError("Backorder quantity cannot exceed required quantity.")
-        if self.allocated_quantity + self.backorder_quantity > self.required_quantity:
-            raise ValueError("Allocated plus backorder quantity cannot exceed required quantity.")
+        if self.fulfilled_quantity + self.backorder_quantity > self.ordered_quantity:
+            raise ValueError("Fulfilled plus backorder quantity cannot exceed ordered quantity.")
 
 
 @dataclass(frozen=True)
 class FulfilmentResult:
-    """Inventory response returned to Sales for a fulfilment request."""
-
     tenant_id: str
     sales_order_id: UUID
     status: FulfilmentRequestStatus
@@ -170,8 +161,6 @@ def build_fulfilment_request(
     correlation_id: str | None = None,
     metadata: Mapping[str, str] | None = None,
 ) -> FulfilmentRequest:
-    """Construct the explicit Sales-to-Inventory request boundary."""
-
     return FulfilmentRequest(
         tenant_id=tenant_id,
         sales_order_id=sales_order_id,
