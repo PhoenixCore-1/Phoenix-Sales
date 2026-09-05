@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+import pytest
+
 from phoenix_sales.api.contracts import RequestContext, TenantContext, UserContext
 from phoenix_sales.integrations.crm_runtime import OptionalCoreCRMIntegration
 
@@ -29,11 +31,11 @@ def context():
     )
 
 
-def crm_payload():
+def crm_payload(tenant_id="tenant-1"):
     return {
-        "tenant_id": "tenant-1",
+        "tenant_id": tenant_id,
         "customer": {
-            "tenant_id": "tenant-1",
+            "tenant_id": tenant_id,
             "customer_id": "customer-1",
             "name": "Acme",
             "status": "active",
@@ -42,7 +44,7 @@ def crm_payload():
             "account_owner_id": "user-2",
         },
         "primary_contact": {
-            "tenant_id": "tenant-1",
+            "tenant_id": tenant_id,
             "contact_id": "contact-1",
             "customer_id": "customer-1",
             "name": "Jane",
@@ -82,3 +84,10 @@ def test_sales_degrades_when_core_reports_unavailable_capability():
     invoker = Invoker(Response(False, error="Target module is not enabled: crm"))
     integration = OptionalCoreCRMIntegration(invoker)
     assert integration.customer_context(context(), "customer-1") is None
+
+
+def test_sales_rejects_cross_tenant_crm_response():
+    invoker = Invoker(Response(True, crm_payload("tenant-2")))
+    integration = OptionalCoreCRMIntegration(invoker)
+    with pytest.raises(PermissionError, match="tenant does not match"):
+        integration.customer_context(context(), "customer-1")
