@@ -51,13 +51,30 @@ class EntitlementContext:
 
 
 @dataclass(frozen=True)
+class AccessScopeContext:
+    """Core-resolved visibility scope for module resources.
+
+    Sales consumes this contract; it does not calculate organizational access.
+    """
+
+    organization_ids: frozenset[str] = field(default_factory=frozenset)
+    unit_ids: frozenset[str] = field(default_factory=frozenset)
+    resource_ids: frozenset[str] = field(default_factory=frozenset)
+    include_children: bool = True
+
+    def can_access_resource(self, resource_id: str) -> bool:
+        return resource_id in self.resource_ids
+
+
+@dataclass(frozen=True)
 class RequestContext:
-    """Security and trace context propagated across the module boundary."""
+    """Security, access-scope and trace context across the module boundary."""
 
     tenant: TenantContext
     user: UserContext
     permissions: PermissionContext = field(default_factory=PermissionContext)
     entitlements: EntitlementContext = field(default_factory=EntitlementContext)
+    access_scope: AccessScopeContext = field(default_factory=AccessScopeContext)
     correlation_id: str = ""
     metadata: Mapping[str, str] = field(default_factory=dict)
 
@@ -70,3 +87,6 @@ class RequestContext:
 
     def has_entitlement(self, entitlement: str) -> bool:
         return self.entitlements.enabled(entitlement)
+
+    def can_access_resource(self, resource_id: str) -> bool:
+        return self.access_scope.can_access_resource(resource_id)
