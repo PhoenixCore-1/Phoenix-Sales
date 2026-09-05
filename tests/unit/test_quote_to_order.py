@@ -71,6 +71,7 @@ def test_requires_create_permission():
 def test_prevents_duplicate_order_for_quote():
     repo = InMemorySalesOrderRepository()
     service = QuoteToOrderService(context("tenant-1", "sales.order.create"), repo)
-    service.convert(quote(), order_number="SO-100")
+    accepted_quote = quote()
+    service.convert(accepted_quote, order_number="SO-100")
     with pytest.raises(ValueError, match="already exists"):
-        service.convert(quote(), order_number="SO-101")
+        service.convert(accepted_quote, order_number="SO-101")
