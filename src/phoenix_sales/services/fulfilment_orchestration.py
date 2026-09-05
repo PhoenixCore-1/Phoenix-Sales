@@ -1,11 +1,12 @@
 """Sales-side orchestration for Inventory fulfilment."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Protocol
 from uuid import UUID, uuid5
 
 from phoenix_sales.api.contracts import RequestContext
-from phoenix_sales.domain.sales_order import SalesOrder, SalesOrderStatus
+from phoenix_sales.domain.sales_order import SalesOrder, SalesOrderLine, SalesOrderStatus
+from phoenix_sales.domain.sales_order_lifecycle import validate_transition
 from phoenix_sales.integrations.fulfilment import (
     FulfilmentLineRequest,
     FulfilmentRequest,
@@ -13,7 +14,6 @@ from phoenix_sales.integrations.fulfilment import (
     build_fulfilment_request,
 )
 from phoenix_sales.persistence.sales_order_repository import SalesOrderRepository
-from phoenix_sales.services.sales_order import SalesOrderService
 
 
 LINE_NAMESPACE = UUID("6d8f8e6e-8a7d-4b4f-a8f2-7d0d8f1f2e91")
@@ -28,7 +28,6 @@ class InventoryFulfilmentPort(Protocol):
 
 def sales_order_line_reference(order_id: UUID, line_index: int) -> UUID:
     """Return a stable integration reference for a Sales Order line."""
-
     if line_index < 0:
         raise ValueError("line index cannot be negative")
     return uuid5(LINE_NAMESPACE, f"{order_id}:line:{line_index}")
@@ -37,7 +36,7 @@ def sales_order_line_reference(order_id: UUID, line_index: int) -> UUID:
 class FulfilmentOrchestrationService:
     """Translate Sales Orders into Inventory requests and apply results."""
 
-    CREATE_PERMISSION = "sales.order.fulfil"
+    FULFIL_PERMISSION = "sales.order.fulfil"
 
     def __init__(
         self,
@@ -48,7 +47,6 @@ class FulfilmentOrchestrationService:
         self._context = context
         self._repository = repository
         self._inventory = inventory
-        self._sales_orders = SalesOrderService(context, repository)
         self._processed_correlations: set[str] = set()
 
     def request_fulfilment(
@@ -57,12 +55,10 @@ class FulfilmentOrchestrationService:
         *,
         correlation_id: str | None = None,
         priority: str | None = None,
-        requested_delivery_date=None,
+        requested_delivery_date: date | None = None,
         delivery_site: str | None = None,
         delivery_address: str | None = None,
     ) -> FulfilmentResult:
-        """Create and submit an Inventory fulfilment request for an order."""
-
         self._require_permission()
         order = self._get(order_id)
         if order.status not in {
@@ -113,8 +109,7 @@ class FulfilmentOrchestrationService:
         return result
 
     def apply_result(self, result: FulfilmentResult) -> SalesOrder:
-        """Apply an Inventory result without taking ownership of physical stock."""
-
+        """Apply Inventory's authoritative fulfilment quantities and status."""
         self._require_permission()
         if result.tenant_id != self._context.tenant.tenant_id:
             raise PermissionError("tenant access denied")
@@ -122,46 +117,39 @@ class FulfilmentOrchestrationService:
         if result.correlation_id and result.correlation_id in self._processed_correlations:
             raise ValueError("fulfilment result already processed for correlation ID")
 
-        expected = {
-            sales_order_line_reference(order.id, index): line
+        references = {
+            sales_order_line_reference(order.id, index): (index, line)
             for index, line in enumerate(order.lines)
         }
-        if {line.sales_order_line_id for line in result.lines} != set(expected):
-            raise ValueError("fulfilment result lines do not match the Sales Order")
+        result_refs = {line.sales_order_line_id for line in result.lines}
+        if not result_refs.issubset(references):
+            raise ValueError("fulfilment result contains an unknown Sales Order line")
 
-        updated_lines = []
+        updated_lines = list(order.lines)
         for result_line in result.lines:
-            current = expected[result_line.sales_order_line_id]
-            if result_line.item_id != current.item_id:
+            index, current = references[result_line.sales_order_line_id]
+            if str(result_line.item_id) != str(current.item_id):
                 raise ValueError("fulfilment result item does not match the Sales Order line")
             if result_line.ordered_quantity != current.quantity:
                 raise ValueError("fulfilment result ordered quantity does not match the Sales Order")
             if result_line.fulfilled_quantity > current.quantity:
                 raise ValueError("fulfilled quantity exceeds Sales Order quantity")
-            updated_lines.append(
-                current.__class__(
-                    item_id=current.item_id,
-                    description=current.description,
-                    quantity=current.quantity,
-                    unit=current.unit,
-                    unit_price=current.unit_price,
-                    discount_percent=current.discount_percent,
-                    ordered_quantity=current.ordered_quantity,
-                    allocated_quantity=result_line.allocated_quantity,
-                    fulfilled_quantity=result_line.fulfilled_quantity,
-                    backorder_quantity=result_line.backorder_quantity,
-                )
+            updated_lines[index] = SalesOrderLine(
+                item_id=current.item_id,
+                description=current.description,
+                quantity=current.quantity,
+                unit=current.unit,
+                unit_price=current.unit_price,
+                discount_percent=current.discount_percent,
+                ordered_quantity=current.ordered_quantity,
+                allocated_quantity=result_line.allocated_quantity,
+                fulfilled_quantity=result_line.fulfilled_quantity,
+                backorder_quantity=result_line.backorder_quantity,
             )
 
         order.lines = updated_lines
         target = self._derive_status(order)
-        if target != order.status:
-            if target is SalesOrderStatus.FULFILLED and order.status is SalesOrderStatus.CONFIRMED:
-                order.status = SalesOrderStatus.IN_PROCESS
-            if target is not order.status:
-                from phoenix_sales.domain.sales_order_lifecycle import validate_transition
-                validate_transition(order.status, target)
-                order.status = target
+        self._transition(order, target)
         order.updated_at = datetime.now(timezone.utc)
         saved = self._repository.save(order)
         if result.correlation_id:
@@ -172,13 +160,25 @@ class FulfilmentOrchestrationService:
     def _derive_status(order: SalesOrder) -> SalesOrderStatus:
         if all(line.fulfilled_quantity >= line.quantity for line in order.lines):
             return SalesOrderStatus.FULFILLED
-        if all(line.backorder_quantity >= line.quantity for line in order.lines):
+        if all(
+            line.fulfilled_quantity == 0
+            and line.backorder_quantity >= line.quantity
+            for line in order.lines
+        ):
             return SalesOrderStatus.BACKORDER
         if any(line.fulfilled_quantity > 0 for line in order.lines):
             return SalesOrderStatus.PARTIALLY_FULFILLED
-        if any(line.allocated_quantity > 0 for line in order.lines):
-            return SalesOrderStatus.IN_PROCESS
         return SalesOrderStatus.IN_PROCESS
+
+    @staticmethod
+    def _transition(order: SalesOrder, target: SalesOrderStatus) -> None:
+        if target == order.status:
+            return
+        if target is SalesOrderStatus.FULFILLED and order.status is SalesOrderStatus.CONFIRMED:
+            validate_transition(order.status, SalesOrderStatus.IN_PROCESS)
+            order.status = SalesOrderStatus.IN_PROCESS
+        validate_transition(order.status, target)
+        order.status = target
 
     def _get(self, order_id: UUID) -> SalesOrder:
         order = self._repository.get(self._context.tenant.tenant_id, order_id)
@@ -187,5 +187,5 @@ class FulfilmentOrchestrationService:
         return order
 
     def _require_permission(self) -> None:
-        if not self._context.has_permission(self.CREATE_PERMISSION):
-            raise PermissionError(f"permission denied: {self.CREATE_PERMISSION}")
+        if not self._context.has_permission(self.FULFIL_PERMISSION):
+            raise PermissionError(f"permission denied: {self.FULFIL_PERMISSION}")
