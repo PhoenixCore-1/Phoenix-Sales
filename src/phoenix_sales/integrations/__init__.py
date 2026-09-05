@@ -10,6 +10,10 @@ from phoenix_sales.integrations.crm import (
     CRMCustomerReference,
 )
 from phoenix_sales.integrations.crm_provider import OptionalCRMIntegration
+from phoenix_sales.integrations.crm_runtime import (
+    CoreInvocationPort,
+    OptionalCoreCRMIntegration,
+)
 
 __all__ = [
     "CRM_CONTACT_CONTRACT",
@@ -20,4 +24,6 @@ __all__ = [
     "CRMCustomerProvider",
     "CRMCustomerReference",
     "OptionalCRMIntegration",
+    "CoreInvocationPort",
+    "OptionalCoreCRMIntegration",
 ]
