@@ -20,6 +20,15 @@ Phoenix Sales is a business module, not a standalone platform. It integrates wit
 - No direct access to another module's private persistence
 - Sage remains the financial/accounting authority
 - AI assists within explicit authority boundaries
+- Customer/account visibility is resolved by Phoenix Core access scope, not by Sales-specific territory security
+
+## Core Access Scope
+
+Phoenix Core owns the platform-wide organization and access model, including organizations, regions, territories, teams, primary/secondary assignments, and resource visibility. Sales receives the Core-resolved scope through `RequestContext.access_scope` and uses it to determine which Sales resources are visible to the current user.
+
+Sales must not independently calculate organizational hierarchy, expand assignments, or create a parallel customer-visibility model. Core establishes the accessible resource scope; Sales then applies its own domain permissions and commercial business rules.
+
+This same contract is intended to be reusable by CRM 360, Inventory 360, Projects, and other Phoenix business modules.
 
 ## Development
 
