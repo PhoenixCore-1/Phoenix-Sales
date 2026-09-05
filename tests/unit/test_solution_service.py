@@ -4,9 +4,11 @@ import pytest
 
 from phoenix_sales.api.contracts import PermissionContext, RequestContext, TenantContext, UserContext
 from phoenix_sales.domain.solution import SolutionComponent, SolutionComponentType, SolutionStatus
+from phoenix_sales.persistence.in_memory_solution_repository import InMemorySolutionRepository
 from phoenix_sales.services.solution import SolutionService
 
 TENANT = "tenant-1"
+REPOSITORY = InMemorySolutionRepository()
 
 
 def context(*permissions: str) -> RequestContext:
@@ -18,7 +20,7 @@ def context(*permissions: str) -> RequestContext:
 
 
 def service(*permissions: str) -> SolutionService:
-    return SolutionService(context(*permissions))
+    return SolutionService(context(*permissions), REPOSITORY)
 
 
 def component(recommended=False):
@@ -43,12 +45,12 @@ def test_create_requires_permission_and_uses_tenant():
 
 def test_read_requires_permission_and_tenant():
     solution = make_solution()
-    assert service("sales.solution.read").get_solution(solution) is solution
+    assert service("sales.solution.read").get_solution(solution.id) == solution
     other = SolutionService(
-        RequestContext(TenantContext("tenant-2"), UserContext("user-1"), PermissionContext(frozenset({"sales.solution.read"})))
+        RequestContext(TenantContext("tenant-2"), UserContext("user-1"), PermissionContext(frozenset({"sales.solution.read"}))),
+        REPOSITORY,
     )
-    with pytest.raises(PermissionError, match="another tenant"):
-        other.get_solution(solution)
+    assert other.get_solution(solution.id) is None
 
 
 def test_update_rejects_protected_fields():
@@ -120,7 +122,8 @@ def test_supersede_requires_approval_and_permission():
 def test_cross_tenant_update_is_denied():
     solution = make_solution()
     other = SolutionService(
-        RequestContext(TenantContext("tenant-2"), UserContext("user-1"), PermissionContext(frozenset({"sales.solution.update"})))
+        RequestContext(TenantContext("tenant-2"), UserContext("user-1"), PermissionContext(frozenset({"sales.solution.update"}))),
+        REPOSITORY,
     )
     with pytest.raises(PermissionError, match="another tenant"):
         other.update_solution(solution, name="No")
