@@ -65,7 +65,7 @@ def test_lifecycle_transition_requires_permission():
 
 
 def test_quote_can_progress_to_sent():
-    app = service("sales.quote.create", "sales.quote.transition")
+    app = service("sales.quote.create", "sales.quote.read", "sales.quote.transition")
     q = quote()
     app.create_quote(q)
     app.transition(q.id, QuoteStatus.INTERNAL_REVIEW)
@@ -75,7 +75,7 @@ def test_quote_can_progress_to_sent():
 
 
 def test_rejected_and_cancelled_can_capture_reason():
-    app = service("sales.quote.create", "sales.quote.transition")
+    app = service("sales.quote.create", "sales.quote.read", "sales.quote.transition")
     q = quote()
     app.create_quote(q)
     app.transition(q.id, QuoteStatus.INTERNAL_REVIEW)
