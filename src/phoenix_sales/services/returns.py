@@ -1,20 +1,11 @@
 """Application services for Sales returns, cancellations and credits."""
 
-from datetime import datetime, timezone
-from decimal import Decimal
-from uuid import UUID
-
 from phoenix_sales.api.contracts import RequestContext
 from phoenix_sales.domain.returns import CancellationRequest, CreditRequest, CreditStatus, RequestStatus, ReturnFlow, ReturnRequest
-from phoenix_sales.integrations.returns import (
-    InventoryReturnAuthorisation, InventoryReturnPort, InventoryReturnResult,
-    SageCreditPort, SageCreditRequest, SageCreditResult,
-)
-
+from phoenix_sales.integrations.returns import InventoryReturnAuthorisation, InventoryReturnPort, InventoryReturnResult, SageCreditPort, SageCreditRequest, SageCreditResult
 
 class ReturnsApplicationService:
     """Coordinate commercial requests without owning inventory or accounting."""
-
     REQUEST_PERMISSION = "sales.returns.request"
     APPROVE_PERMISSION = "sales.returns.approve"
     CREDIT_PERMISSION = "sales.credit.request"
@@ -56,7 +47,7 @@ class ReturnsApplicationService:
     def apply_inventory_result(self, request: ReturnRequest, result: InventoryReturnResult) -> ReturnRequest:
         self._require(self.APPROVE_PERMISSION)
         self._tenant(result.tenant_id)
-        if result.return_request_id != request.id or result.sales_order_id != request.sales_order_id:
+        if result.return_request_id != request.id:
             raise ValueError("inventory result does not match return request")
         if result.received_quantity < 0 or result.received_quantity > request.quantity:
             raise ValueError("invalid received quantity")
