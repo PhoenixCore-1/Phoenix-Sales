@@ -71,12 +71,20 @@ class OptionalCoreCRMIntegration:
         if not isinstance(value, Mapping):
             raise ValueError("CRM customer context response must be a mapping")
 
+        response_tenant_id = str(value.get("tenant_id", "")).strip()
+        if response_tenant_id != tenant_id:
+            raise PermissionError("CRM customer context tenant does not match Sales request tenant")
+
         customer = value.get("customer")
         if not isinstance(customer, Mapping):
             raise ValueError("CRM customer context is missing customer")
 
+        customer_tenant_id = str(customer.get("tenant_id", "")).strip()
+        if customer_tenant_id != tenant_id:
+            raise PermissionError("CRM customer tenant does not match Sales request tenant")
+
         reference = CRMCustomerReference(
-            tenant_id=str(customer.get("tenant_id", tenant_id)),
+            tenant_id=customer_tenant_id,
             customer_id=str(customer.get("customer_id", "")),
             name=str(customer.get("name", "")),
             status=str(customer.get("status", "")),
@@ -92,8 +100,11 @@ class OptionalCoreCRMIntegration:
         contact_value = value.get("primary_contact")
         contact = None
         if isinstance(contact_value, Mapping):
+            contact_tenant_id = str(contact_value.get("tenant_id", "")).strip()
+            if contact_tenant_id != tenant_id:
+                raise PermissionError("CRM contact tenant does not match Sales request tenant")
             contact = CRMContactReference(
-                tenant_id=str(contact_value.get("tenant_id", tenant_id)),
+                tenant_id=contact_tenant_id,
                 contact_id=str(contact_value.get("contact_id", "")),
                 customer_id=str(contact_value.get("customer_id", reference.customer_id)),
                 name=str(contact_value.get("name", "")),
@@ -103,7 +114,7 @@ class OptionalCoreCRMIntegration:
             )
 
         return CRMCustomerContext(
-            tenant_id=str(value.get("tenant_id", tenant_id)),
+            tenant_id=tenant_id,
             customer=reference,
             primary_contact=contact,
             last_interaction_at=value.get("last_interaction_at"),
