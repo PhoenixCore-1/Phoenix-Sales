@@ -135,7 +135,15 @@ class OpportunityAnalysis:
             risks.append(OpportunityRisk(OpportunityRiskType.STALE, "Activity history missing", "Recent activity cannot be established from the supplied context.", 1))
             missing.append("Recent activity")
 
-        if not factors and len(missing) >= 2:
+        # Insufficient information means there is effectively no usable known
+        # context to assess the opportunity. Missing fields alone do not make
+        # an opportunity information-insufficient when meaningful known facts
+        # are available (for example, a known customer requirement).
+        known_facts = [
+            fact for fact in context.facts
+            if fact.fact_type is FactType.KNOWN and fact.value not in (None, "")
+        ]
+        if not known_facts and len(missing) >= 2:
             health = OpportunityHealth.INSUFFICIENT_INFORMATION
         elif any(r.severity == 3 for r in risks):
             health = OpportunityHealth.CRITICAL
