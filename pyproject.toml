@@ -7,7 +7,9 @@ name = "phoenix-sales"
 version = "1.0.0"
 description = "Phoenix Sales V1.0 business module"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "phoenix-core-v2 @ git+https://github.com/PhoenixCore-1/Phoenix_V2.0.git",
+]
 
 [project.optional-dependencies]
 test = ["pytest>=8,<9"]
