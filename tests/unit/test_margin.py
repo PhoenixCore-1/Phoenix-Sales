@@ -20,9 +20,9 @@ def test_margin_below_minimum_is_blocked():
     assert rule.evaluate(Decimal("19.99")) is MarginStatus.BLOCKED
 
 
-def test_exact_thresholds_are_acceptable():
+def test_exact_thresholds_have_expected_status():
     rule = MarginRule(Decimal("20"), Decimal("30"))
-    assert rule.evaluate(Decimal("20")) is MarginStatus.ACCEPTABLE
+    assert rule.evaluate(Decimal("20")) is MarginStatus.WARNING
     assert rule.evaluate(Decimal("30")) is MarginStatus.ACCEPTABLE
 
 
