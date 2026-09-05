@@ -90,7 +90,7 @@ class OpportunityAnalysis:
             risks.append(OpportunityRisk(OpportunityRiskType.UNCLEAR_REQUIREMENT, "Requirement unclear", "The supplied context does not contain a clear customer requirement.", 2))
             actions.append("Confirm the customer requirement and success criteria.")
 
-        for key in ("stage", "probability", "estimated_value", "solution_value", "quote_value", "order_value", "quote_status", "quote_expiry", "competitor", "margin", "last_activity", "next_action", "requirement", "customer_requirement"):
+        for key in ("stage", "probability", "estimated_value", "solution_value", "quote_value", "order_value", "quote_status", "quote_expiry", "competitor", "margin", "last_activity", "next_action", "requirement", "customer_requirement", "customer requirement"):
             fact = values.get(key)
             if fact and fact.value is not None:
                 factors.append(OpportunitySignal(fact.name, fact.value, fact.fact_type, fact.source))
